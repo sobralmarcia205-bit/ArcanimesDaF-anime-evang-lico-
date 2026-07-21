@@ -1,43 +1,37 @@
 #!/bin/bash
 
-# Script de configuração inicial do projeto
+# Script de configuração e ativação AUTOMÁTICA
 
-echo "🎬 Configurando ArcanimesDaF..."
+echo "🎬 ARCANIMES DAF - ATIVAÇÃO AUTOMÁTICA TOTAL"
 echo ""
 
-# Criar ambiente virtual
+# 1. Criar ambiente virtual
 if [ ! -d "venv" ]; then
     echo "📦 Criando ambiente virtual..."
     python3 -m venv venv
-    source venv/bin/activate
-else
-    echo "✅ Ambiente virtual já existe"
-    source venv/bin/activate
 fi
 
-# Instalar dependências
-echo "📥 Instalando dependências..."
-pip install --upgrade pip
-pip install -r requirements.txt
+# Ativar ambiente virtual
+source venv/bin/activate 2>/dev/null || . venv/Scripts/activate 2>/dev/null
 
-# Criar arquivo .env se não existir
+# 2. Instalar dependências
+echo "📥 Instalando dependências..."
+pip install --upgrade pip -q
+pip install -r requirements.txt -q
+
+# 3. Criar arquivo .env se não existir
 if [ ! -f ".env" ]; then
     echo "📝 Criando arquivo .env..."
     cp .env.example .env
-    echo "⚠️  Abra o arquivo .env e preencha suas chaves!"
-else
-    echo "✅ Arquivo .env já existe"
 fi
 
+# 4. Executar automação total
 echo ""
-echo "✅ Configuração concluída!"
+echo "🚀 Ativando TODAS as automações do YouTube..."
 echo ""
-echo "📋 Próximos passos:"
-echo "1. Abra o arquivo .env e adicione suas chaves:"
-echo "   - OPENAI_API_KEY"
-echo "   - YOUTUBE_CLIENT_ID"
-echo "   - YOUTUBE_CLIENT_SECRET"
+
+python automacao_total.py
+
 echo ""
-echo "2. Execute o projeto:"
-echo "   python main.py"
-echo ""
+echo "✅ SETUP COMPLETO!"
+echo "🎬 ARCANIMES DAF está 100% automático!"
