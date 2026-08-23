@@ -194,7 +194,14 @@ def gerar_roteiro(categoria: str, pacote: dict) -> dict:
     )
 
     texto = resposta.content[0].text.strip()
-    texto = texto.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    # Remove marcadores de código JSON
+    if texto.startswith("```json"):
+        texto = texto[7:]
+    if texto.startswith("```"):
+        texto = texto[3:]
+    if texto.endswith("```"):
+        texto = texto[:-3]
+    texto = texto.strip()
 
     try:
         return json.loads(texto)
@@ -288,5 +295,4 @@ async def executar() -> dict:
 
 
 if __name__ == "__main__":
-  
     asyncio.run(executar())
