@@ -30,14 +30,43 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python arcanimes_pipeline.py
 
+      - name: Verificar arquivos gerados
+        run: |
+          echo "📁 Verificando estrutura de diretórios..."
+          ls -la ROTEIROS_PRONTOS/ || echo "⚠️  Nenhum roteiro encontrado"
+          ls -la AUDIOS_PRONTOS/ || echo "⚠️  Nenhum áudio encontrado"
+          ls -la LEGENDAS_PRONTAS/ || echo "⚠️  Nenhuma legenda encontrada"
+          ls -la PROMPTS_CREATY/ || echo "⚠️  Nenhum prompt encontrado"
+          ls -la DADOS_PUBLICACAO/ || echo "⚠️  Nenhum dado de publicação encontrado"
+          test -f historico_temas.json && echo "✅ Histórico encontrado" || echo "⚠️  Histórico não encontrado"
+
       - name: Fazer commit dos arquivos gerados
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json
-          git commit -m "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')" || echo "Nenhuma mudança"
-          git push
+          git config --local user.email "github-actions[bot]@github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Tentar adicionar todos os arquivos gerados
+          git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json 2>/dev/null || true
+          
+          # Verificar se há mudanças
+          if git diff --cached --quiet; then
+            echo "⚠️  Nenhuma mudança detectada, pulando commit"
+          else
+            echo "✅ Mudanças detectadas, fazendo commit..."
+            git commit -m "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')"
+            git push --force-with-lease origin HEAD:main || git push --force-with-lease
+          fi
 
       - name: Sucesso ✅
         if: success()
-        run: echo "Conteúdo gerado com sucesso!"
+        run: |
+          echo "✅ Conteúdo gerado com sucesso!"
+          echo "Próxima execução: $(date -d '24 hours' '+%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Erro no Pipeline ❌
+        if: failure()
+        run: |
+          echo "❌ Erro na execução do pipeline"
+          echo "Verifique:"
+          echo "  1. Se ANTHROPIC_API_KEY está configurada em Settings > Secrets"
+          echo "  2. Os logs acima para mais detalhes"
