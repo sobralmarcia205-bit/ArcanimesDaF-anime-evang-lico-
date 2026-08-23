@@ -14,10 +14,15 @@ Requer no repo (Settings > Secrets > Actions): ANTHROPIC_API_KEY
 import asyncio
 import json
 import os
+import sys
 from datetime import datetime, timezone
 
 import anthropic
 import edge_tts
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente do .env (se existir)
+load_dotenv()
 
 CATEGORIAS = {
     "oracao": {
@@ -113,9 +118,20 @@ LEGENDAS_DIR = "LEGENDAS_PRONTAS"
 DADOS_PUBLICACAO_DIR = "DADOS_PUBLICACAO"
 
 
+def _validar_api_key():
+    """Valida se a chave da API está configurada."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("[ERRO] ANTHROPIC_API_KEY não configurada!")
+        print("Configure em: Settings > Secrets and variables > Actions")
+        sys.exit(1)
+    return api_key
+
+
 def _garantir_pastas():
     for pasta in [ROTEIROS_DIR, AUDIOS_DIR, PROMPTS_DIR, LEGENDAS_DIR, DADOS_PUBLICACAO_DIR]:
         os.makedirs(pasta, exist_ok=True)
+        print(f"[LOG] Pasta garantida: {pasta}")
 
 
 def _carregar_historico() -> dict:
@@ -128,6 +144,7 @@ def _carregar_historico() -> dict:
 def _salvar_historico(historico: dict) -> None:
     with open(HISTORICO_PATH, "w", encoding="utf-8") as f:
         json.dump(historico, f, ensure_ascii=False, indent=2)
+    print(f"[LOG] Histórico salvo: {HISTORICO_PATH}")
 
 
 def _slugify(titulo: str) -> str:
@@ -164,12 +181,12 @@ def escolher_categoria(historico: dict) -> str:
     candidatos = [c for c in ORDEM_ROTACAO if c not in usados_recentes]
     if not candidatos:
         candidatos = ORDEM_ROTACAO
-    return max(candidatos, key=score)
+    categoria_escolhida = max(candidatos, key=score)
+    print(f"[LOG] Categoria escolhida: {categoria_escolhida}")
+    return categoria_escolhida
 
 
-def gerar_roteiro(categoria: str, pacote: dict) -> dict:
-    client = anthropic.Anthropic()
-
+def gerar_roteiro(categoria: str, pacote: dict, client: anthropic.Anthropic) -> dict:
     gancho = pacote.get("gancho") or "Louvor instrumental — sem narração"
     system_prompt = (
         "Você escreve roteiros curtos (15-30s) para Shorts evangélicos em "
@@ -186,6 +203,7 @@ def gerar_roteiro(categoria: str, pacote: dict) -> dict:
         "Gere o roteiro completo seguindo a estrutura."
     )
 
+    print(f"[LOG] Gerando roteiro via Claude (categoria: {categoria})...")
     resposta = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=600,
@@ -204,8 +222,11 @@ def gerar_roteiro(categoria: str, pacote: dict) -> dict:
     texto = texto.strip()
 
     try:
-        return json.loads(texto)
-    except json.JSONDecodeError:
+        roteiro = json.loads(texto)
+        print(f"[OK] Roteiro gerado com sucesso")
+        return roteiro
+    except json.JSONDecodeError as e:
+        print(f"[AVISO] Erro ao fazer parse JSON: {e}. Usando fallback.")
         return {
             "titulo": pacote["titulo_base"],
             "texto_narracao": texto,
@@ -214,23 +235,50 @@ def gerar_roteiro(categoria: str, pacote: dict) -> dict:
 
 
 async def gerar_audio(texto: str, voz: str, slug: str) -> str:
+    """Gera áudio com tratamento de erro."""
     caminho = os.path.join(AUDIOS_DIR, f"{slug}.mp3")
-    comunicador = edge_tts.Communicate(texto, voz)
-    await comunicador.save(caminho)
-    return caminho
+    try:
+        print(f"[LOG] Gerando áudio com voz: {voz}")
+        comunicador = edge_tts.Communicate(texto, voz)
+        await comunicador.save(caminho)
+        print(f"[OK] Áudio salvo: {caminho}")
+        return caminho
+    except Exception as e:
+        print(f"[ERRO] Falha ao gerar áudio: {e}")
+        print(f"[AVISO] Continuando sem áudio...")
+        return None
 
 
 def gerar_srt(texto: str, slug: str) -> str:
+    """Gera SRT com tratamento melhorado de frases."""
     caminho = os.path.join(LEGENDAS_DIR, f"{slug}.srt")
+    
+    # Dividir por pontos e filtrar strings vazias
     frases = [f.strip() for f in texto.split(".") if f.strip()]
+    
+    if not frases:
+        print(f"[AVISO] Nenhuma frase encontrada para gerar SRT")
+        frases = [texto]  # Fallback: usar o texto completo
+    
     linhas = []
     t = 0.0
     duracao = 3.0
+    
     for i, frase in enumerate(frases, start=1):
-        linhas += [str(i), f"{_formatar_tempo_srt(t)} --> {_formatar_tempo_srt(t + duracao)}", frase + ".", ""]
-        t += duracao
+        frase_limpa = frase.strip()
+        if frase_limpa:  # Só adicionar se não for vazio
+            linhas += [
+                str(i),
+                f"{_formatar_tempo_srt(t)} --> {_formatar_tempo_srt(t + duracao)}",
+                frase_limpa + ".",
+                ""
+            ]
+            t += duracao
+    
     with open(caminho, "w", encoding="utf-8") as f:
         f.write("\n".join(linhas))
+    
+    print(f"[OK] SRT gerado: {caminho}")
     return caminho
 
 
@@ -239,31 +287,52 @@ def salvar_prompt_creaty(prompt: str, slug: str) -> str:
     prompt_final = prompt[:800]
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(prompt_final)
+    print(f"[OK] Prompt Creaty salvo: {caminho}")
     return caminho
 
 
 async def executar() -> dict:
+    """Executa o pipeline completo de geração de conteúdo."""
+    print("\n" + "="*60)
+    print("🎬 INICIANDO PIPELINE ARCANIMES")
+    print("="*60 + "\n")
+    
+    # Validar configurações
+    _validar_api_key()
     _garantir_pastas()
+    
+    # Carregar histórico e escolher categoria
     historico = _carregar_historico()
-
     categoria = escolher_categoria(historico)
     pacote = CATEGORIAS[categoria]
 
-    roteiro = gerar_roteiro(categoria, pacote)
+    # Inicializar cliente Anthropic com chave explícita
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    client = anthropic.Anthropic(api_key=api_key)
+
+    # Gerar roteiro
+    roteiro = gerar_roteiro(categoria, pacote, client)
     slug = _slugify(roteiro.get("titulo", pacote["titulo_base"]))
 
+    # Salvar roteiro
     caminho_roteiro = os.path.join(ROTEIROS_DIR, f"{slug}.json")
     with open(caminho_roteiro, "w", encoding="utf-8") as f:
         json.dump(roteiro, f, ensure_ascii=False, indent=2)
+    print(f"[OK] Roteiro salvo: {caminho_roteiro}")
 
+    # Gerar áudio e legendas (se houver voz)
     caminho_audio = None
     caminho_srt = None
     if pacote["voz"]:
         caminho_audio = await gerar_audio(roteiro["texto_narracao"], pacote["voz"], slug)
         caminho_srt = gerar_srt(roteiro["texto_narracao"], slug)
+    else:
+        print(f"[LOG] Categoria sem voz, pulando áudio e legendas")
 
+    # Salvar prompt Creaty
     caminho_prompt = salvar_prompt_creaty(pacote["prompt_creaty_en"], slug)
 
+    # Salvar dados de publicação
     dados_publicacao = {
         "categoria": categoria,
         "titulo": roteiro.get("titulo", pacote["titulo_base"]),
@@ -279,18 +348,25 @@ async def executar() -> dict:
     caminho_dados = os.path.join(DADOS_PUBLICACAO_DIR, f"{slug}.json")
     with open(caminho_dados, "w", encoding="utf-8") as f:
         json.dump(dados_publicacao, f, ensure_ascii=False, indent=2)
+    print(f"[OK] Dados de publicação salvos: {caminho_dados}")
 
+    # Atualizar histórico
     historico.setdefault("ultimas_categorias", []).append(categoria)
     historico["ultimas_categorias"] = historico["ultimas_categorias"][-30:]
     historico.setdefault("log_execucoes", []).append({
-        "categoria": categoria, "titulo": dados_publicacao["titulo"],
+        "categoria": categoria,
+        "titulo": dados_publicacao["titulo"],
         "data": dados_publicacao["gerado_em"],
     })
     historico["log_execucoes"] = historico["log_execucoes"][-30:]
     _salvar_historico(historico)
 
-    print(f"[OK] Conteúdo pronto: {slug}")
+    print("\n" + "="*60)
+    print(f"✅ PIPELINE CONCLUÍDO COM SUCESSO")
+    print("="*60 + "\n")
+    print(f"[RESULTADO] Conteúdo pronto: {slug}")
     print(json.dumps(dados_publicacao, ensure_ascii=False, indent=2))
+    
     return dados_publicacao
 
 
