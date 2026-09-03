@@ -187,7 +187,7 @@ def gerar_roteiro(categoria: str, pacote: dict) -> dict:
     )
 
     resposta = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-3-5-sonnet-20241022",
         max_tokens=600,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
