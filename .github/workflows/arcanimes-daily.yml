@@ -78,7 +78,13 @@ jobs:
           echo "Próxima execução: $(date -d '24 hours' '+%Y-%m-%d %H:%M:%S UTC')"
 
       - name: Erro no Pipeline ❌
-        if: failure()
+ on:
+  schedule:
+    # 7h BRT = 10:00 UTC
+    - cron: '0 10 * * *'
+    # 21h BRT = 00:00 UTC (dia seguinte)
+    - cron: '0 0 * * *'
+  workflow_dispatch:       if: failure()
         run: |
           echo "❌ Erro na execução do pipeline"
           echo "Verifique:"
