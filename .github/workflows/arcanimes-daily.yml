@@ -26,12 +26,15 @@ jobs:
         run: |
           echo "=== Ambiente ==="
           uname -a
-          echo "\n=== Python ==="
+          echo
+          echo "=== Python ==="
           python --version || true
-          echo "\n=== Pip (versão e lista) ==="
+          echo
+          echo "=== Pip (versão e lista) ==="
           python -m pip --version || true
           python -m pip list || true
-          echo "\n=== Arquivos no repositório (raiz) ==="
+          echo
+          echo "=== Arquivos no repositório (raiz) ==="
           ls -la || true
 
       - name: Configurar Python
@@ -86,7 +89,8 @@ jobs:
           # Verificar se há mudanças
           if git diff --cached --quiet; then
             echo "⚠️  Nenhuma mudança detectada, pulando commit"
-            echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+            # Não expor branch quando não há push
+            echo "branch=" >> $GITHUB_OUTPUT
           else
             echo "✅ Mudanças detectadas, fazendo commit..."
             git commit -m "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')"
