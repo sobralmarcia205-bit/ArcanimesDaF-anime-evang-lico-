@@ -22,6 +22,18 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Diagnóstico do runner (debug)
+        run: |
+          echo "=== Ambiente ==="
+          uname -a
+          echo "\n=== Python ==="
+          python --version || true
+          echo "\n=== Pip (versão e lista) ==="
+          python -m pip --version || true
+          python -m pip list || true
+          echo "\n=== Arquivos no repositório (raiz) ==="
+          ls -la || true
+
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
@@ -58,22 +70,55 @@ jobs:
           ls -la DADOS_PUBLICACAO/ || echo "⚠️  Nenhum dado de publicação encontrado"
           test -f historico_temas.json && echo "✅ Histórico encontrado" || echo "⚠️  Histórico não encontrado"
 
-      - name: Fazer commit dos arquivos gerados
+      - name: Fazer commit dos arquivos gerados (cria branch e envia)
+        id: fazer_commit
         run: |
+          set -e
           git config --local user.email "github-actions[bot]@github.com"
           git config --local user.name "github-actions[bot]"
-          
+
+          BRANCH_NAME="auto/generated-$(date '+%Y%m%d%H%M%S')"
+          git checkout -b "$BRANCH_NAME"
+
           # Tentar adicionar todos os arquivos gerados
           git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json 2>/dev/null || true
-          
+
           # Verificar se há mudanças
           if git diff --cached --quiet; then
             echo "⚠️  Nenhuma mudança detectada, pulando commit"
+            echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
           else
             echo "✅ Mudanças detectadas, fazendo commit..."
             git commit -m "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')"
-            git push origin HEAD:main || git push
+            git push --set-upstream origin "$BRANCH_NAME"
+            echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
           fi
+        shell: bash
+
+      - name: Criar Pull Request com alterações (quando houver)
+        if: ${{ steps.fazer_commit.outputs.branch != '' }}
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Conteúdo gerado automaticamente"
+          title: "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')"
+          body: |
+            Automação diária gerou novos arquivos (roteiros/audios/legendas). Revise e aprove.
+          branch: ${{ steps.fazer_commit.outputs.branch }}
+          base: main
+
+      - name: Salvar artefatos gerados
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arcanimes-gerados
+          path: |
+            ROTEIROS_PRONTOS/
+            AUDIOS_PRONTOS/
+            LEGENDAS_PRONTAS/
+            PROMPTS_CREATY/
+            DADOS_PUBLICACAO/
+            historico_temas.json
 
       - name: Sucesso ✅
         if: ${{ success() }}
