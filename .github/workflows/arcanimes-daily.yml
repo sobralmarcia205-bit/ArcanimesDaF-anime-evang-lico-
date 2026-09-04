@@ -4,6 +4,10 @@ on:
   schedule:
     # Roda diariamente às 11:00 AM UTC
     - cron: '0 11 * * *'
+    # 7h BRT = 10:00 UTC
+    - cron: '0 10 * * *'
+    # 21h BRT = 00:00 UTC (dia seguinte)
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -72,19 +76,13 @@ jobs:
           fi
 
       - name: Sucesso ✅
-        if: success()
+        if: ${{ success() }}
         run: |
           echo "✅ Conteúdo gerado com sucesso!"
           echo "Próxima execução: $(date -d '24 hours' '+%Y-%m-%d %H:%M:%S UTC')"
 
       - name: Erro no Pipeline ❌
- on:
-  schedule:
-    # 7h BRT = 10:00 UTC
-    - cron: '0 10 * * *'
-    # 21h BRT = 00:00 UTC (dia seguinte)
-    - cron: '0 0 * * *'
-  workflow_dispatch:       if: failure()
+        if: ${{ failure() }}
         run: |
           echo "❌ Erro na execução do pipeline"
           echo "Verifique:"
