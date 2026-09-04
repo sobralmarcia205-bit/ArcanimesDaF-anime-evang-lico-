@@ -204,34 +204,30 @@ def gerar_roteiro(categoria: str, pacote: dict, client: anthropic.Anthropic) -> 
     )
 
     print(f"[LOG] Gerando roteiro via Claude (categoria: {categoria})...")
-    resposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=600,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-
-    texto = resposta.content[0].text.strip()
-    # Remove marcadores de código JSON
-    if texto.startswith("```json"):
-        texto = texto[7:]
-    if texto.startswith("```"):
-        texto = texto[3:]
-    if texto.endswith("```"):
-        texto = texto[:-3]
-    texto = texto.strip()
-
     try:
-        roteiro = json.loads(texto)
-        print(f"[OK] Roteiro gerado com sucesso")
-        return roteiro
-    except json.JSONDecodeError as e:
-        print(f"[AVISO] Erro ao fazer parse JSON: {e}. Usando fallback.")
-        return {
-            "titulo": pacote["titulo_base"],
-            "texto_narracao": texto,
-            "descricao": f"{pacote['titulo_base']} — ArcanimesDaFé",
-        }
+        resposta = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=600,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+    except anthropic.BadRequestError as e:
+        # Verificar se é erro de crédito insuficiente
+        if "credit balance is too low" in str(e):
+            print("\n" + "="*60)
+            print("❌ ERRO: Créditos insuficientes na API Anthropic")
+            print("="*60)
+            print("\n[SOLUÇÃO] Execute estes passos:")
+            print("1. Acesse: https://console.anthropic.com/account/billing/overview")
+            print("2. Faça login com a conta Anthropic associada à sua API key")
+            print("3. Vá para 'Plans & Billing' e adicione créditos")
+            print("4. Aguarde 5-10 minutos para ativar os novos créditos")
+            print("5. Dispare o workflow manualmente (ou aguarde a próxima execução agendada)")
+            print("\n" + "="*60 + "\n")
+            sys.exit(1)
+        else:
+            # Repassar outro erro
+            raise
 
 
 async def gerar_audio(texto: str, voz: str, slug: str) -> str:
