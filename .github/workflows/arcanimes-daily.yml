@@ -14,11 +14,29 @@ jobs:
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validar configuração
+        run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "❌ ERRO: ANTHROPIC_API_KEY não está configurada!"
+            echo "Configure em: Settings > Secrets and variables > Actions > New repository secret"
+            exit 1
+          fi
+          echo "✅ ANTHROPIC_API_KEY detectada"
+          
+          if [ ! -f "arcanimes_pipeline.py" ]; then
+            echo "❌ ERRO: arcanimes_pipeline.py não encontrado!"
+            exit 1
+          fi
+          echo "✅ Pipeline script encontrado"
 
       - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Instalar dependências
         run: |
@@ -28,16 +46,46 @@ jobs:
       - name: Executar pipeline ArcanimesDaFé
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python arcanimes_pipeline.py
+        run: |
+          echo "🚀 Iniciando pipeline ArcanimesDaFé..."
+          python arcanimes_pipeline.py
+          if [ $? -eq 0 ]; then
+            echo "✅ Pipeline executado com sucesso"
+          else
+            echo "❌ Erro ao executar pipeline"
+            exit 1
+          fi
 
       - name: Fazer commit dos arquivos gerados
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json
-          git commit -m "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')" || echo "Nenhuma mudança"
-          git push
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Verificar se há mudanças
+          if git diff --quiet; then
+            echo "ℹ️ Nenhuma mudança detectada"
+            exit 0
+          fi
+          
+          git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json 2>/dev/null || true
+          
+          if git diff --cached --quiet; then
+            echo "ℹ️ Nenhum arquivo para commitar"
+            exit 0
+          fi
+          
+          git commit -m "🤖 Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')" || echo "Nenhuma mudança para commitar"
+          git push origin setup-github-actions || git push origin $(git rev-parse --abbrev-ref HEAD)
 
       - name: Sucesso ✅
         if: success()
-        run: echo "Conteúdo gerado com sucesso!"
+        run: |
+          echo "🎉 Conteúdo gerado com sucesso!"
+          echo "📊 Workflow concluído em: $(date '+%Y-%m-%d %H:%M:%S')"
+
+      - name: Notificar Falha ❌
+        if: failure()
+        run: |
+          echo "::error::Pipeline falhou!"
+          echo "Verifique os logs acima para mais detalhes"
+          exit 1
