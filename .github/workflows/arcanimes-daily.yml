@@ -2,8 +2,6 @@ name: ArcanimesDaFé - Automação Diária
 
 on:
   schedule:
-    # Roda diariamente às 11:00 AM UTC
-    - cron: '0 11 * * *'
     # 7h BRT = 10:00 UTC
     - cron: '0 10 * * *'
     # 21h BRT = 00:00 UTC (dia seguinte)
@@ -21,21 +19,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Diagnóstico do runner (debug)
-        run: |
-          echo "=== Ambiente ==="
-          uname -a
-          echo
-          echo "=== Python ==="
-          python --version || true
-          echo
-          echo "=== Pip (versão e lista) ==="
-          python -m pip --version || true
-          python -m pip list || true
-          echo
-          echo "=== Arquivos no repositório (raiz) ==="
-          ls -la || true
 
       - name: Configurar Python
         uses: actions/setup-python@v4
@@ -61,6 +44,7 @@ jobs:
       - name: Executar pipeline ArcanimesDaFé
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python arcanimes_pipeline.py
 
       - name: Verificar arquivos gerados
@@ -71,70 +55,4 @@ jobs:
           ls -la LEGENDAS_PRONTAS/ || echo "⚠️  Nenhuma legenda encontrada"
           ls -la PROMPTS_CREATY/ || echo "⚠️  Nenhum prompt encontrado"
           ls -la DADOS_PUBLICACAO/ || echo "⚠️  Nenhum dado de publicação encontrado"
-          test -f historico_temas.json && echo "✅ Histórico encontrado" || echo "⚠️  Histórico não encontrado"
-
-      - name: Fazer commit dos arquivos gerados (cria branch e envia)
-        id: fazer_commit
-        run: |
-          set -e
-          git config --local user.email "github-actions[bot]@github.com"
-          git config --local user.name "github-actions[bot]"
-
-          BRANCH_NAME="auto/generated-$(date '+%Y%m%d%H%M%S')"
-          git checkout -b "$BRANCH_NAME"
-
-          # Tentar adicionar todos os arquivos gerados
-          git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json 2>/dev/null || true
-
-          # Verificar se há mudanças
-          if git diff --cached --quiet; then
-            echo "⚠️  Nenhuma mudança detectada, pulando commit"
-            # Não expor branch quando não há push
-            echo "branch=" >> $GITHUB_OUTPUT
-          else
-            echo "✅ Mudanças detectadas, fazendo commit..."
-            git commit -m "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')"
-            git push --set-upstream origin "$BRANCH_NAME"
-            echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
-
-      - name: Criar Pull Request com alterações (quando houver)
-        if: ${{ steps.fazer_commit.outputs.branch != '' }}
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Conteúdo gerado automaticamente"
-          title: "Conteúdo gerado automaticamente - $(date '+%Y-%m-%d %H:%M:%S')"
-          body: |
-            Automação diária gerou novos arquivos (roteiros/audios/legendas). Revise e aprove.
-          branch: ${{ steps.fazer_commit.outputs.branch }}
-          base: main
-
-      - name: Salvar artefatos gerados
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: arcanimes-gerados
-          path: |
-            ROTEIROS_PRONTOS/
-            AUDIOS_PRONTOS/
-            LEGENDAS_PRONTAS/
-            PROMPTS_CREATY/
-            DADOS_PUBLICACAO/
-            historico_temas.json
-
-      - name: Sucesso ✅
-        if: ${{ success() }}
-        run: |
-          echo "✅ Conteúdo gerado com sucesso!"
-          echo "Próxima execução: $(date -d '24 hours' '+%Y-%m-%d %H:%M:%S UTC')"
-
-      - name: Erro no Pipeline ❌
-        if: ${{ failure() }}
-        run: |
-          echo "❌ Erro na execução do pipeline"
-          echo "Verifique:"
-          echo "  1. Se ANTHROPIC_API_KEY está configurada em Settings > Secrets and variables > Actions"
-          echo "  2. Se a chave está correta e ativa"
-          echo "  3. Os logs acima para mais detalhes"
+          test -f historico_te
