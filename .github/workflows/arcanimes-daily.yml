@@ -2,9 +2,7 @@ name: ArcanimesDaFé - Automação Diária
 
 on:
   schedule:
-    # 7h BRT = 10:00 UTC
     - cron: '0 10 * * *'
-    # 21h BRT = 00:00 UTC (dia seguinte)
     - cron: '0 0 * * *'
   workflow_dispatch:
 
@@ -55,12 +53,12 @@ jobs:
           ls -la LEGENDAS_PRONTAS/ || echo "⚠️  Nenhuma legenda encontrada"
           ls -la PROMPTS_CREATY/ || echo "⚠️  Nenhum prompt encontrado"
           ls -la DADOS_PUBLICACAO/ || echo "⚠️  Nenhum dado de publicação encontrado"
-          test -f historico_te
-python-dotenv==1.0.0
-openai==1.3.0
-google-api-python-client==2.104.0
-google-auth-oauthlib==1.2.0
-google-auth-httplib2==0.2.0
-anthropic>=0.40.0
-edge-tts>=6.1.0
-google-generativeai>=0.8.0
+          test -f historico_temas.json && echo "✅ historico_temas.json presente" || echo "⚠️  historico_temas.json não encontrado"
+
+      - name: Commit e push dos arquivos gerados
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ROTEIROS_PRONTOS/ AUDIOS_PRONTOS/ LEGENDAS_PRONTAS/ PROMPTS_CREATY/ DADOS_PUBLICACAO/ historico_temas.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Auto: conteúdo gerado pelo pipeline ArcanimesDaFé"
+          git push origin main
